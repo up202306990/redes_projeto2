@@ -17,9 +17,9 @@
 #define SV_TRANSFER_COMPLETE 226
 #define SV_GOODBYE           221
 
-#define DEFAULT_HOST_REGEX      "%*[^/]//%[^/]"
-#define SPECIFIC_HOST_REGEX     "%*[^/]//%*[^@]@%[^/]"
-#define USER_REGEX              "%*[^/]//%[^:/]"
+#define DEFAULT_HOST_REGEX      "%*[^/]//%511[^/]"
+#define SPECIFIC_HOST_REGEX     "%*[^/]//%*[^@]@%511[^/]"
+#define USER_REGEX              "%*[^/]//%511[^:/]"
 #define PASS_REGEX              "%*[^/]//%*[^:]:%[^@\n]"
 #define PATH_REGEX              "%*[^/]//%*[^/]/%s"
 #define SV_CODE_REGEX           "%d"
@@ -30,8 +30,8 @@
 
 typedef struct {
     char host[512];
-    char user[512];
-    char pass[512];
+    char user[17];
+    char pass[17];
     char path[512];
     char file[512];
     char ip[512];

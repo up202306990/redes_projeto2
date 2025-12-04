@@ -1,33 +1,54 @@
 #include "application.h"
 
 int parse_url(const char* ch_url, URL* url) {
+    if (!ch_url || strlen(ch_url) == 0) return -1;
 
-    if (strchr(ch_url, '/') == NULL) return -1;
+    const char* p = ch_url;
+    if (strncmp(p, "ftp://", 6) == 0) p += 6;
 
-    if(strchr (ch_url, '@') == NULL) {
-        sscanf(ch_url, DEFAULT_HOST_REGEX, url->host);
-        strcpy(url->user, DEFAULT_USER);
-        strcpy(url->pass, DEFAULT_PASS);
+    const char* at_ptr = strchr(p, '@');
+    const char* slash_ptr = strchr(p, '/');
+
+    if (!slash_ptr) return -1;
+
+    strcpy(url->user, DEFAULT_USER);
+    strcpy(url->pass, DEFAULT_PASS);
+
+    if (at_ptr && at_ptr < slash_ptr) {
+        const char* colon_ptr = strchr(p, ':');
+        if (colon_ptr && colon_ptr < at_ptr) {
+            strncpy(url->user, p, colon_ptr - p);
+            url->user[colon_ptr - p] = '\0';
+            strncpy(url->pass, colon_ptr + 1, at_ptr - colon_ptr - 1);
+            url->pass[at_ptr - colon_ptr - 1] = '\0';
+        } else {
+
+            strncpy(url->user, p, at_ptr - p);
+            url->user[at_ptr - p] = '\0';
+        }
+        p = at_ptr + 1;
     }
 
-    else {
-        sscanf(ch_url, SPECIFIC_HOST_REGEX, url->host);
-        sscanf(ch_url, USER_REGEX, url->user);
-        sscanf(ch_url, PASS_REGEX, url->pass);
-    }
+    strncpy(url->host, p, slash_ptr - p);
+    url->host[slash_ptr - p] = '\0';
 
-    sscanf(ch_url, PATH_REGEX, url->path);
-    strcpy(url->file, strrchr(ch_url, '/') + 1);
+    strcpy(url->path, slash_ptr + 1);
 
-    struct hostent *h;
-    if(strlen(url->host) == 0) return -1;
+    const char* last_slash = strrchr(url->path, '/');
+    if (last_slash)
+        strcpy(url->file, last_slash + 1);
+    else
+        strcpy(url->file, url->path);
+
+    struct hostent* h;
+    if (strlen(url->host) == 0) return -1;
 
     if ((h = gethostbyname(url->host)) == NULL) {
         herror("gethostbyname()");
-        exit(-1);
+        return -1;
     }
 
-    strcpy(url->ip, inet_ntoa(*((struct in_addr *) h->h_addr_list[0])));
+    strcpy(url->ip, inet_ntoa(*((struct in_addr*)h->h_addr_list[0])));
 
     return 0;
 }
@@ -56,62 +77,77 @@ int create_socket(char* ip, int port) {
 }
 
 int read_response(const int socket, char* buffer) {
-    
-    char byte;
-    int index = 0, responseCode;
-    ResponseState state = START;
-    memset(buffer, 0, 512);
+    char line[512];
+    int responseCode = 0;
 
-    while (state != END) {
-        read(socket, &byte, 1);
+    while (1) {
+        int byte = 0;
+        int idx = 0;
+        char c;
+        memset(line, 0, sizeof(line));
 
-        switch (state) {
-            case START:
-                if (byte == ' ') state = SINGLE_LINE;
-                if (byte == '-') state = MULTI_LINE;
-                if (byte == '\n') state = END;
-                else buffer[index++] = byte;
-                break;
-            case SINGLE_LINE:
-                if(byte == '\n') state = END;
-                else buffer[index++] = byte;
-                break;
-            case MULTI_LINE:
-                if(byte == '\n') {
-                    memset(buffer, 0, 512);
-                    state = START;
-                    index = 0;
-                }
-                else buffer[index++] = byte;
-                break;
-            case END:
-                break;
-            default:
-                break;
+        while ((byte = read(socket, &c, 1)) > 0) {
+            if (c == '\r') continue;
+            if (c == '\n') break;
+            if (idx < sizeof(line) - 1) line[idx++] = c;
         }
+        line[idx] = '\0';
+
+        if (byte <= 0) {
+            printf("[DEBUG] Socket closed or read error\n");
+            return -1;
+        }
+
+        strcpy(buffer, line);
+        printf("[DEBUG] Full response: '%s'\n", buffer);
+
+        if (sscanf(line, "%d", &responseCode) != 1) {
+            responseCode = -1;
+        }
+
+        if (strlen(line) >= 4 && line[3] == '-') {
+            int code = responseCode;
+            do {
+                idx = 0;
+                memset(line, 0, sizeof(line));
+                while ((byte = read(socket, &c, 1)) > 0) {
+                    if (c == '\r') continue;
+                    if (c == '\n') break;
+                    if (idx < sizeof(line) - 1) line[idx++] = c;
+                }
+                line[idx] = '\0';
+                strcpy(buffer, line);
+                printf("[DEBUG] Full response: '%s'\n", buffer);
+            } while (!(strlen(line) >= 4 && line[3] == ' ' && atoi(line) == code));
+        }
+
+        break;
     }
 
-    sscanf(buffer, SV_CODE_REGEX, &responseCode);
     return responseCode;
 }
 
+
 int authentication(const int socket, const char* user, const char* pass) {
 
-    char inputUser[5 + strlen(user) + 1];
-    sprintf(inputUser, "USER %s\n", user);
+    char inputUser[512 + 5 + 2];
+    snprintf(inputUser, sizeof(inputUser), "USER %s\r\n", user);
 
-    char inputPass[5 + strlen(pass) + 1];
-    sprintf(inputPass, "PASS %s\n", pass);
+    char inputPass[512 + 5 + 2];
+    sprintf(inputPass, "PASS %s\r\n", pass);
 
     char answer[512];
 
     write(socket, inputUser, strlen(inputUser));
-    if(read_response (socket, answer) != SV_PASSWORD_READY) {
+
+    if(read_response(socket, answer) != SV_PASSWORD_READY) {
         printf("Unknown user '%s'. Abort.\n", user);
         exit(-1);
     }
 
+    printf("[DEBUG] Sending: '%s'\n", inputPass);
     write(socket, inputPass, strlen(inputPass));
+    
     return read_response(socket, answer);
 }
 
@@ -120,7 +156,7 @@ int enter_passive_mode(const int socket, char* ip, int* port) {
     char answer[512];
     int ip1, ip2, ip3, ip4, port1, port2;
 
-    write(socket, "pasv\n", 5);
+    write(socket, "PASV\r\n", 6);
     if(read_response(socket, answer) != SV_PASSIVE) return -1;
 
     sscanf(answer, PASSIVE_REGEX, &ip1, &ip2, &ip3, &ip4, &port1, &port2);
@@ -133,7 +169,7 @@ int enter_passive_mode(const int socket, char* ip, int* port) {
 int request_transfer(const int socket, char* path) {
     
     char inputFile[5 + strlen(path) + 1];
-    sprintf(inputFile, "retr %s\n", path);
+    sprintf(inputFile, "retr %s\r\n", path);
 
     char answer[512];
 
@@ -165,7 +201,7 @@ int get_file(const int socketA, const int socketB, char* filename) {
 int close_connection (const int socketA, const int socketB) {
     
     char answer[512];
-    write(socketA, "quit\n", 5);
+    write(socketA, "QUIT\r\n", 6);
     if(read_response(socketA, answer) != SV_GOODBYE) return -1;
 
     if (close(socketA) < 0) return -1;
@@ -188,7 +224,7 @@ int main(int argc, char* argv[]) {
         exit(-1);
     }
 
-    printf("Host: %s\n"
+    printf("Host: '%s'\n"
            "User: %s\n"
            "Password: %s\n"
            "Path: %s\n"
@@ -199,6 +235,8 @@ int main(int argc, char* argv[]) {
 
     char answer[512];
     int socketA = create_socket(url.ip, FTP_PORT);
+    printf("[DEBUG] Connected to %s:%d\n", url.ip, FTP_PORT);
+
     if(socketA < 0 || read_response(socketA, answer) != SV_WELCOME) {
         fprintf(stderr, "Socket to %s and port %d failed\n", url.ip, FTP_PORT);
         exit(-1);
@@ -208,6 +246,8 @@ int main(int argc, char* argv[]) {
         fprintf(stderr, "Authentication failed with user %s and password %s\n", url.user, url.pass);
         exit(-1);
     }
+    printf("[DEBUG] Authenticated as %s\n", url.user);
+
 
     char ip[512];
     int port;
@@ -216,6 +256,8 @@ int main(int argc, char* argv[]) {
         fprintf(stderr, "Couldn't enter passive mode.\n");
         exit(-1);
     }
+    printf("[DEBUG] Passive mode IP: %s Port: %d\n", ip, port);
+
 
     int socketB = create_socket(ip, port);
     if(socketB < 0) {
@@ -237,6 +279,7 @@ int main(int argc, char* argv[]) {
         fprintf(stderr, "Error when closing sockets\n");
         exit(-1);
     }
+
     return 0;
 }
 
