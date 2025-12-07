@@ -144,8 +144,6 @@ int authentication(const int socket, const char* user, const char* pass) {
         printf("Unknown user '%s'. Abort.\n", user);
         exit(-1);
     }
-
-    printf("[DEBUG] Sending: '%s'\n", inputPass);
     write(socket, inputPass, strlen(inputPass));
     
     return read_response(socket, answer);
@@ -185,27 +183,39 @@ int get_file(const int socketA, const int socketB, char* filename) {
         exit(-1);
     }
 
-    char buffer[512];
+    char buffer[4096];
     int bytes;
 
-    do {
-        bytes = read(socketB, buffer, 512);
-        if(fwrite(buffer, bytes, 1, fd) < 0) return -1;
-    } while (bytes);
+    while ((bytes = read(socketB, buffer, sizeof(buffer))) > 0) {
+        if (fwrite(buffer, 1, bytes, fd) != bytes) {
+            perror("fwrite");
+            fclose(fd);
+            return -1;
+        }
+    }
+
+    if (bytes < 0) {
+        perror("read");
+        fclose(fd);
+        return -1;
+    }
 
     fclose(fd);
+    if (close(socketB) < 0) return -1;
 
-    return read_response(socketA, buffer);
+    char answer[512];
+    int resp = read_response(socketA, answer);
+    return resp;
 }
 
-int close_connection (const int socketA, const int socketB) {
+
+int close_connection (const int socketA) {
     
     char answer[512];
     write(socketA, "QUIT\r\n", 6);
     if(read_response(socketA, answer) != SV_GOODBYE) return -1;
 
     if (close(socketA) < 0) return -1;
-    if (close(socketB) < 0) return -1;
     return 0;
 }
 
@@ -265,7 +275,9 @@ int main(int argc, char* argv[]) {
         exit(-1);
     }
 
-    if(request_transfer(socketA, url.path) != SV_START_TRANSFER) {
+    int resp = request_transfer(socketA, url.path);
+
+    if (resp != SV_START_TRANSFER && resp != SV_START_TRANSFER_CONNECTED) {
         fprintf(stderr, "Path %s doesn't exist in %s:%d\n", url.path, ip, port);
         exit(-1);
     }
@@ -275,7 +287,7 @@ int main(int argc, char* argv[]) {
         exit(-1);
     }
 
-    if(close_connection(socketA, socketB) != 0) {
+    if(close_connection(socketA) != 0) {
         fprintf(stderr, "Error when closing sockets\n");
         exit(-1);
     }

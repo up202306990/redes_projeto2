@@ -9,19 +9,15 @@
 
 #define FTP_PORT 21
 
-#define SV_WELCOME           220
-#define SV_PASSWORD_READY    331
-#define SV_LOGIN_SUCCESS     230
-#define SV_PASSIVE           227
-#define SV_START_TRANSFER    150
-#define SV_TRANSFER_COMPLETE 226
-#define SV_GOODBYE           221
+#define SV_WELCOME                  220
+#define SV_PASSWORD_READY           331
+#define SV_LOGIN_SUCCESS            230
+#define SV_PASSIVE                  227
+#define SV_START_TRANSFER           150
+#define SV_START_TRANSFER_CONNECTED 125
+#define SV_TRANSFER_COMPLETE        226
+#define SV_GOODBYE                  221
 
-#define DEFAULT_HOST_REGEX      "%*[^/]//%511[^/]"
-#define SPECIFIC_HOST_REGEX     "%*[^/]//%*[^@]@%511[^/]"
-#define USER_REGEX              "%*[^/]//%511[^:/]"
-#define PASS_REGEX              "%*[^/]//%*[^:]:%[^@\n]"
-#define PATH_REGEX              "%*[^/]//%*[^/]/%s"
 #define SV_CODE_REGEX           "%d"
 #define PASSIVE_REGEX           "%*[^(](%d,%d,%d,%d,%d,%d)%*[^\n]"
 
@@ -37,12 +33,6 @@ typedef struct {
     char ip[512];
 } URL;
 
-typedef enum {
-    START,
-    SINGLE_LINE, 
-    MULTI_LINE, 
-    END
-} ResponseState;
 
 int parse_url(const char* ch_url, URL* url);
 
@@ -58,4 +48,4 @@ int request_transfer(const int socket, char* path);
 
 int get_file(const int socketA, const int socketB, char* filename);
 
-int close_connection (const int socketA, const int socketB);
+int close_connection (const int socketA);
