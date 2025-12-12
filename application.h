@@ -7,7 +7,8 @@
 #include <string.h>
 #include <netdb.h>
 
-#define FTP_PORT 21
+#define FTP_PORT   21
+#define MAX_LENGTH 512
 
 #define SV_WELCOME                  220
 #define SV_PASSWORD_READY           331
@@ -25,12 +26,12 @@
 #define DEFAULT_PASS            "anonymous"
 
 typedef struct {
-    char host[512];
-    char user[17];
-    char pass[17];
-    char path[512];
-    char file[512];
-    char ip[512];
+    char host[MAX_LENGTH];
+    char user[MAX_LENGTH];
+    char pass[MAX_LENGTH];
+    char path[MAX_LENGTH];
+    char file[MAX_LENGTH];
+    char ip[MAX_LENGTH];
 } URL;
 
 

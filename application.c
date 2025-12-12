@@ -77,7 +77,7 @@ int create_socket(char* ip, int port) {
 }
 
 int read_response(const int socket, char* buffer) {
-    char line[512];
+    char line[MAX_LENGTH];
     int responseCode = 0;
 
     while (1) {
@@ -127,16 +127,15 @@ int read_response(const int socket, char* buffer) {
     return responseCode;
 }
 
-
 int authentication(const int socket, const char* user, const char* pass) {
 
-    char inputUser[512 + 5 + 2];
-    snprintf(inputUser, sizeof(inputUser), "USER %s\r\n", user);
+    char inputUser[MAX_LENGTH + 5 + 2];
+    sprintf(inputUser, "user %s\r\n", user);
 
-    char inputPass[512 + 5 + 2];
-    sprintf(inputPass, "PASS %s\r\n", pass);
+    char inputPass[MAX_LENGTH + 5 + 2];
+    sprintf(inputPass, "pass %s\r\n", pass);
 
-    char answer[512];
+    char answer[MAX_LENGTH];
 
     write(socket, inputUser, strlen(inputUser));
 
@@ -151,10 +150,10 @@ int authentication(const int socket, const char* user, const char* pass) {
 
 int enter_passive_mode(const int socket, char* ip, int* port) {
 
-    char answer[512];
+    char answer[MAX_LENGTH];
     int ip1, ip2, ip3, ip4, port1, port2;
 
-    write(socket, "PASV\r\n", 6);
+    write(socket, "pasv\r\n", 6);
     if(read_response(socket, answer) != SV_PASSIVE) return -1;
 
     sscanf(answer, PASSIVE_REGEX, &ip1, &ip2, &ip3, &ip4, &port1, &port2);
@@ -166,10 +165,10 @@ int enter_passive_mode(const int socket, char* ip, int* port) {
 
 int request_transfer(const int socket, char* path) {
     
-    char inputFile[5 + strlen(path) + 1];
+    char inputFile[5 + MAX_LENGTH + 1];
     sprintf(inputFile, "retr %s\r\n", path);
 
-    char answer[512];
+    char answer[MAX_LENGTH];
 
     write(socket, inputFile, strlen(inputFile));
     return read_response(socket, answer);
@@ -203,7 +202,7 @@ int get_file(const int socketA, const int socketB, char* filename) {
     fclose(fd);
     if (close(socketB) < 0) return -1;
 
-    char answer[512];
+    char answer[MAX_LENGTH];
     int resp = read_response(socketA, answer);
     return resp;
 }
@@ -211,8 +210,8 @@ int get_file(const int socketA, const int socketB, char* filename) {
 
 int close_connection (const int socketA) {
     
-    char answer[512];
-    write(socketA, "QUIT\r\n", 6);
+    char answer[MAX_LENGTH];
+    write(socketA, "quit\r\n", 6);
     if(read_response(socketA, answer) != SV_GOODBYE) return -1;
 
     if (close(socketA) < 0) return -1;
@@ -243,7 +242,7 @@ int main(int argc, char* argv[]) {
            url.host, url.user, url.pass, url.path, url.file, url.ip
     );
 
-    char answer[512];
+    char answer[MAX_LENGTH];
     int socketA = create_socket(url.ip, FTP_PORT);
     printf("[DEBUG] Connected to %s:%d\n", url.ip, FTP_PORT);
 
@@ -259,7 +258,7 @@ int main(int argc, char* argv[]) {
     printf("[DEBUG] Authenticated as %s\n", url.user);
 
 
-    char ip[512];
+    char ip[MAX_LENGTH];
     int port;
 
     if(enter_passive_mode(socketA, ip, &port) != SV_PASSIVE) {
